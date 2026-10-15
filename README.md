@@ -37,7 +37,7 @@ You can use this to set environment variables, define functions, and run post-lo
 
 ## Advanced configuration
 
-Your most import configuration files (e.g. vim, inputrc) may not be bash scripts. Put them in ~/.sshrc.d and sshrc will copy them to a (guaranteed) unique folder in the server's /tmp directory after login. You can find them at `$SSHHOME/.sshrc.d`. You can usually tell programs to load their configuration from the $SSHHOME/.sshrc.d directory by setting the right environment variables. Putting too much data in ~/.sshrc.d will slow down your login times. If the folder contents are > 64kB, the server may block your sshrc attempts.
+Your most import configuration files (e.g. vim, inputrc) may not be bash scripts. Put them in ~/.sshrc.d and sshrc will copy them to a (guaranteed) unique folder in the server's /tmp directory after login. You can find them at `$SSHHOME/.sshrc.d`. You can usually tell programs to load their configuration from the $SSHHOME/.sshrc.d directory by setting the right environment variables. Putting too much data in ~/.sshrc.d will slow down your login times. sshrc refuses to connect if the compressed, encoded payload exceeds 128KiB (the Linux limit for a single command-line argument, which applies to both client and server); roughly 90kB of compressed files. Set `SSHRC_MAX_CMD_SIZE` to change the limit if you know both ends support more (e.g. macOS to macOS).
 
 ### Vim
 
