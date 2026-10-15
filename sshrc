@@ -17,19 +17,27 @@ function sshrc() {
         else
             WELCOME_MSG=""
         fi
-        local payload
+        local payload remote_cmd
+        # $files is deliberately unquoted: it is a space-separated list of names
+        # shellcheck disable=SC2086
         payload=$(tar czf - -h -C "$SSHHOME" $files | openssl enc -base64; exit "${PIPESTATUS[0]}") || {
             echo >&2 "sshrc: failed to archive $files in $SSHHOME"
             return 1
         }
-        local remote_cmd="
+        # The script below is sent to the server as a single double-quoted
+        # string with \$ escapes for what the server must expand itself. The
+        # base64 blobs are spliced in by ending the double quote, writing a
+        # $'...' literal around a $(...) that runs here, and reopening it.
+        # ShellCheck warns about that pattern, but it is intended.
+        # shellcheck disable=SC1078,SC1079,SC2027
+        remote_cmd="
             command -v openssl >/dev/null 2>&1 || { echo >&2 \"sshrc requires openssl to be installed on the server, but it's not. Aborting.\"; exit 1; }
             $WELCOME_MSG
             SSHHOME=\$(mktemp -d -t .$(whoami).sshrc.XXXX) || { echo >&2 \"sshrc: mktemp failed on the server. Aborting.\"; exit 1; }
             export SSHHOME
             export SSHRCCLEANUP=\$SSHHOME
             trap \"rm -rf \$SSHRCCLEANUP; exit\" 0
-            echo $'"$(cat "${BASH_SOURCE[0]}" | openssl enc -base64)"' | tr -s ' ' $'\n' | openssl enc -base64 -d > \$SSHHOME/sshrc
+            echo $'"$(openssl enc -base64 < "${BASH_SOURCE[0]}")"' | tr -s ' ' $'\n' | openssl enc -base64 -d > \$SSHHOME/sshrc
             chmod +x \$SSHHOME/sshrc
 
             echo $'"$( cat << 'EOF' | openssl enc -base64
@@ -71,7 +79,8 @@ EOF
         local cmd_size
         cmd_size=$(printf %s "$remote_cmd" | LC_ALL=C wc -c)
         if [ "$cmd_size" -ge "$max_cmd_size" ]; then
-            echo >&2 $'.sshrc.d and .sshrc files are too large to send\ncommand size: '$cmd_size' bytes, limit: '$max_cmd_size$' bytes (override with SSHRC_MAX_CMD_SIZE)'
+            echo >&2 ".sshrc.d and .sshrc files are too large to send"
+            echo >&2 "command size: $cmd_size bytes, limit: $max_cmd_size bytes (override with SSHRC_MAX_CMD_SIZE)"
             return 1
         fi
         ssh -t "${SSHARGS[@]}" -- "$DOMAIN" "$remote_cmd"
@@ -128,8 +137,9 @@ function sshrc_parse() {
     elif [ -z "$DOMAIN" ]; then
       DOMAIN="$1"
     else
-      local SEMICOLON=$([[ "$@" = *[![:space:]]* ]] && echo '; ')
-      CMDARG="$@$SEMICOLON exit"
+      local semicolon
+      semicolon=$([[ "$*" = *[![:space:]]* ]] && echo '; ')
+      CMDARG="$*$semicolon exit"
       return
     fi
     shift

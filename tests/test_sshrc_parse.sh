@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Tests for the argument parsing in sshrc. Run with: bash tests/test_sshrc_parse.sh
 
+# shellcheck source=../sshrc
 source "$(dirname "${BASH_SOURCE[0]}")/../sshrc"
 
 failures=0
@@ -13,7 +14,6 @@ assert_parse() {
   local description=$1 expected_args=$2 expected_domain=$3 expected_cmd=$4
   shift 5  # also drops the "--" separator
 
-  SSHARGS=() DOMAIN= CMDARG=
   sshrc_parse "$@"
 
   local actual_args
