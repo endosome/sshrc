@@ -73,7 +73,7 @@ EOF
             echo >&2 $'.sshrc.d and .sshrc files are too large to send\ncommand size: '$cmd_size' bytes, limit: '$max_cmd_size$' bytes (override with SSHRC_MAX_CMD_SIZE)'
             exit 1
         fi
-        ssh -t "$DOMAIN" "${SSHARGS[@]}" "$remote_cmd"
+        ssh -t "${SSHARGS[@]}" -- "$DOMAIN" "$remote_cmd"
     else
         echo "No such file: $SSHHOME/.sshrc" >&2
         exit 1
@@ -83,22 +83,24 @@ EOF
 SSHARGS=()
 
 function sshrc_parse() {
+  local endopts=
   while [[ -n $1 ]]; do
-    case $1 in
-      -B | -b | -c | -D | -E | -e | -F | -I | -i | -J | -L | -l | -m | -O | -o | -P | -p | -Q | -R | -S | -W | -w )
-        SSHARGS+=("$1" "$2"); shift ;;
-      -* )
-        SSHARGS+=("$1") ;;
-      *)
-        if [ -z "$DOMAIN" ]; then
-         DOMAIN="$1"
-        else
-          local SEMICOLON=$([[ "$@" = *[![:space:]]* ]] && echo '; ')
-          CMDARG="$@$SEMICOLON exit"
-          return;
-        fi
-        ;;
-    esac
+    if [[ -z $endopts && $1 == -- ]]; then
+      endopts=1
+    elif [[ -z $endopts && $1 == -* ]]; then
+      case $1 in
+        -B | -b | -c | -D | -E | -e | -F | -I | -i | -J | -L | -l | -m | -O | -o | -P | -p | -Q | -R | -S | -W | -w )
+          SSHARGS+=("$1" "$2"); shift ;;
+        * )
+          SSHARGS+=("$1") ;;
+      esac
+    elif [ -z "$DOMAIN" ]; then
+      DOMAIN="$1"
+    else
+      local SEMICOLON=$([[ "$@" = *[![:space:]]* ]] && echo '; ')
+      CMDARG="$@$SEMICOLON exit"
+      return
+    fi
     shift
   done
   if [ -z "$DOMAIN" ]; then
