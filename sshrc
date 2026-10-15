@@ -82,18 +82,44 @@ EOF
 
 SSHARGS=()
 
+# The ssh options that take a value (e.g. -p 22), one letter each. Every other
+# option is a plain flag (e.g. -v, -N) that stands alone.
+SSH_VALUE_OPTIONS=BbcDEeFIiJLlmOoPpQRSWw
+
+# Succeeds if the ssh option word $1 needs the *next* word as its value.
+#
+# ssh lets several single-letter options share one word, as in "-vp 22", and
+# lets a value follow its letter directly, as in "-p22" or "-oBatchMode=yes".
+# Reading left to right, the first letter that takes a value consumes the rest
+# of the word. So the value is in the next word only if that letter is last.
+#
+#   -v       no value letters       -> fails
+#   -vp      "p" is last            -> succeeds, "22" is in the next word
+#   -p22     "p" has "22" after it  -> fails, value is attached
+#   -vp22    same                   -> fails
+function sshrc_option_needs_next_word() {
+  local letters=${1#-} i
+  for ((i = 0; i < ${#letters}; i++)); do
+    if [[ $SSH_VALUE_OPTIONS == *"${letters:i:1}"* ]]; then
+      ((i == ${#letters} - 1))
+      return
+    fi
+  done
+  return 1
+}
+
 function sshrc_parse() {
   local endopts=
   while [[ -n $1 ]]; do
     if [[ -z $endopts && $1 == -- ]]; then
       endopts=1
     elif [[ -z $endopts && $1 == -* ]]; then
-      case $1 in
-        -B | -b | -c | -D | -E | -e | -F | -I | -i | -J | -L | -l | -m | -O | -o | -P | -p | -Q | -R | -S | -W | -w )
-          SSHARGS+=("$1" "$2"); shift ;;
-        * )
-          SSHARGS+=("$1") ;;
-      esac
+      if sshrc_option_needs_next_word "$1"; then
+        SSHARGS+=("$1" "$2")
+        shift
+      else
+        SSHARGS+=("$1")
+      fi
     elif [ -z "$DOMAIN" ]; then
       DOMAIN="$1"
     else
