@@ -17,10 +17,16 @@ function sshrc() {
         else
             WELCOME_MSG=""
         fi
+        local payload
+        payload=$(tar czf - -h -C "$SSHHOME" $files | openssl enc -base64; exit "${PIPESTATUS[0]}") || {
+            echo >&2 "sshrc: failed to archive $files in $SSHHOME"
+            exit 1
+        }
         local remote_cmd="
             command -v openssl >/dev/null 2>&1 || { echo >&2 \"sshrc requires openssl to be installed on the server, but it's not. Aborting.\"; exit 1; }
             $WELCOME_MSG
-            export SSHHOME=\$(mktemp -d -t .$(whoami).sshrc.XXXX)
+            SSHHOME=\$(mktemp -d -t .$(whoami).sshrc.XXXX) || { echo >&2 \"sshrc: mktemp failed on the server. Aborting.\"; exit 1; }
+            export SSHHOME
             export SSHRCCLEANUP=\$SSHHOME
             trap \"rm -rf \$SSHRCCLEANUP; exit\" 0
             echo $'"$(cat "$0" | openssl enc -base64)"' | tr -s ' ' $'\n' | openssl enc -base64 -d > \$SSHHOME/sshrc
@@ -52,7 +58,7 @@ EOF
                 )"' | tr -s ' ' $'\n' | openssl enc -base64 -d > \$SSHHOME/bashsshrc
             chmod +x \$SSHHOME/bashsshrc
 
-            echo $'"$(tar czf - -h -C "$SSHHOME" $files | openssl enc -base64)"' | tr -s ' ' $'\n' | openssl enc -base64 -d | tar mxzf - -C \$SSHHOME
+            echo $'"$payload"' | tr -s ' ' $'\n' | openssl enc -base64 -d | tar mxzf - -C \$SSHHOME
             export SSHHOME=\$SSHHOME
             echo $'"$(printf '%s\n' "$CMDARG" | openssl enc -base64)"' | tr -s ' ' $'\n' | openssl enc -base64 -d >> \$SSHHOME/sshrc.bashrc
             bash --rcfile \$SSHHOME/sshrc.bashrc
