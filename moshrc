@@ -4,24 +4,33 @@
 
 function moshrc() {
     local SSHHOME=${SSHHOME:=~}
-    if [ -f $SSHHOME/.sshrc ]; then
+    if [ -f "$SSHHOME/.sshrc" ]; then
         local files=.sshrc
-        if [ -d $SSHHOME/.sshrc.d ]; then
+        if [ -d "$SSHHOME/.sshrc.d" ]; then
             files="$files .sshrc.d"
         fi
-        SIZE=$(tar cfz - -h -C $SSHHOME $files | wc -c)
-        if [ $SIZE -gt 65536 ]; then
-            echo >&2 $'.sshrc.d and .sshrc files must be less than 64kb\ncurrent size: '$SIZE' bytes'
-            exit 1
-        fi
-        mosh "$@" -- /bin/bash -c "
+        local payload remote_cmd
+        # $files is deliberately unquoted: it is a space-separated list of names
+        # shellcheck disable=SC2086
+        payload=$(tar czf - -h -C "$SSHHOME" $files | xxd -p; exit "${PIPESTATUS[0]}") || {
+            echo >&2 "moshrc: failed to archive $files in $SSHHOME"
+            return 1
+        }
+        # The script below is sent to the server as a single double-quoted
+        # string with \$ escapes for what the server must expand itself. The
+        # hex blobs are spliced in by ending the double quote, writing a
+        # $'...' literal around a $(...) that runs here, and reopening it.
+        # ShellCheck warns about that pattern, but it is intended.
+        # shellcheck disable=SC1078,SC1079,SC2027
+        remote_cmd="
             command -v xxd >/dev/null 2>&1 || { echo >&2 \"sshrc requires xxd to be installed on the server, but it's not. Aborting.\"; exit 1; }
             if [ -e /etc/motd ]; then cat /etc/motd; fi
             if [ -e /etc/update-motd.d ]; then run-parts /etc/update-motd.d/; fi
-            export SSHHOME=\$(mktemp -d -t .$(whoami).sshrc.XXXX)
+            SSHHOME=\$(mktemp -d -t .$(whoami).sshrc.XXXX) || { echo >&2 \"moshrc: mktemp failed on the server. Aborting.\"; exit 1; }
+            export SSHHOME
             export SSHRCCLEANUP=\$SSHHOME
             trap \"rm -rf \$SSHRCCLEANUP; exit\" 0
-            echo $'$(cat $0 | xxd -p)' | xxd -p -r > \$SSHHOME/moshrc
+            echo $'$(xxd -p < "${BASH_SOURCE[0]}")' | xxd -p -r > \$SSHHOME/moshrc
             chmod +x \$SSHHOME/moshrc
 
             echo $'$( cat << 'EOF' | xxd -p
@@ -44,17 +53,38 @@ EOF
 )' | xxd -p -r > \$SSHHOME/bashsshrc
             chmod +x \$SSHHOME/bashsshrc
 
-            echo $'$(tar czf - -h -C $SSHHOME $files | xxd -p)' | xxd -p -r | tar mxzf - -C \$SSHHOME
+            echo $'$payload' | xxd -p -r | tar mxzf - -C \$SSHHOME
             export SSHHOME=\$SSHHOME
             bash --rcfile \$SSHHOME/sshrc.bashrc
             "
+        # The whole payload travels as a single argument, so the limit that
+        # matters is the length of that argument (Linux caps one argument at
+        # 128KiB, MAX_ARG_STRLEN), on both this machine and the server. The
+        # hex encoding is twice the size of the data, so this allows about
+        # 40kB of compressed files.
+        local max_cmd_size=${SSHRC_MAX_CMD_SIZE:-131072}
+        local cmd_size
+        cmd_size=$(printf %s "$remote_cmd" | LC_ALL=C wc -c)
+        if [ "$cmd_size" -ge "$max_cmd_size" ]; then
+            echo >&2 ".sshrc.d and .sshrc files are too large to send"
+            echo >&2 "command size: $cmd_size bytes, limit: $max_cmd_size bytes (override with SSHRC_MAX_CMD_SIZE)"
+            return 1
+        fi
+        mosh "$@" -- /bin/bash -c "$remote_cmd"
     else
-        echo "No such file: $SSHHOME/.sshrc"
+        echo "No such file: $SSHHOME/.sshrc" >&2
+        return 1
     fi
 }
-if [ "$1" ]; then
+
+# Only run when executed, so the function can also be sourced and reused
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
     command -v xxd >/dev/null 2>&1 || { echo >&2 "sshrc requires xxd to be installed locally, but it's not. Aborting."; exit 1; }
-    moshrc "$@"
-else
-    ssh
+    if [ "$1" ]; then
+        moshrc "$@"
+    else
+        mosh  # no arguments: let mosh print its usage
+        exit 1
+    fi
+    exit
 fi

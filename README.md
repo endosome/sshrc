@@ -109,7 +109,7 @@ You may have different configurations for different servers. I recommend the fol
 ## Known limitations
 
 * **Your files are visible in process listings.** The contents of `~/.sshrc` and `~/.sshrc.d` travel inside the ssh command line, so other users on your machine and on the server may be able to read them via `ps` or `/proc/<pid>/cmdline` while the session starts. Do not put secrets (tokens, passwords, private keys) in them.
-* **Size limit.** Everything is sent as one command-line argument, which caps the payload at 128KiB on Linux (about 90kB of compressed files). See the note on `SSHRC_MAX_CMD_SIZE` under Advanced configuration.
+* **Size limit.** Everything is sent as one command-line argument, which caps the payload at 128KiB on Linux (about 90kB of compressed files). `moshrc` hex-encodes the payload, so it allows about 40kB. See the note on `SSHRC_MAX_CMD_SIZE` under Advanced configuration.
 * **Symlinks are followed.** Files are archived with `tar -h`, so a symlink inside `~/.sshrc.d` sends the file it points to, wherever that is.
 * **Temporary files can be left behind.** The server-side directory is removed when your session ends, but a `kill -9` of the session or a lost connection can leave a `.<user>.sshrc.XXXX` directory in the server's temporary directory.
 * **ssh option parsing is hand-written.** sshrc has to know which ssh options take a value to find the hostname. It handles bundles such as `-vp 22`, attached values (`-p22`, `-oFoo=bar`) and `--`, but the list of value-taking options (`SSH_VALUE_OPTIONS` in `sshrc`) is fixed. If an ssh option is missing from it, its value will be mistaken for the hostname.
@@ -117,7 +117,7 @@ You may have different configurations for different servers. I recommend the fol
 
 ## Development
 
-Run the tests with `bash tests/test_sshrc_parse.sh`, and lint with `shellcheck -x -P SCRIPTDIR sshrc tests/*.sh`.
+Run the tests with `bash tests/test_sshrc_parse.sh` and `bash tests/test_moshrc.sh`, and lint with `shellcheck -x -P SCRIPTDIR sshrc moshrc tests/*.sh`.
 
 
 [sshrc-git]: https://aur.archlinux.org/packages/sshrc-git
