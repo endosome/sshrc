@@ -6,7 +6,7 @@ function sshrc() {
         if [ -d "$SSHHOME/.sshrc.d" ]; then
             files="$files .sshrc.d"
         fi
-        if [ -z "$CMDARG" -a ! -e ~/.sshrc.d/.hushlogin ]; then
+        if [ -z "$CMDARG" ] && [ ! -e "$SSHHOME/.sshrc.d/.hushlogin" ]; then
             WELCOME_MSG="
                 if [ ! -e ~/.hushlogin ]; then
                     if [ -e /etc/motd ]; then cat /etc/motd; fi
@@ -68,7 +68,8 @@ EOF
         # 128KiB, MAX_ARG_STRLEN), on both this machine and the server, not
         # ARG_MAX, which is for all arguments combined. Check the real size.
         local max_cmd_size=${SSHRC_MAX_CMD_SIZE:-131072}
-        local cmd_size=$(printf %s "$remote_cmd" | LC_ALL=C wc -c)
+        local cmd_size
+        cmd_size=$(printf %s "$remote_cmd" | LC_ALL=C wc -c)
         if [ "$cmd_size" -ge "$max_cmd_size" ]; then
             echo >&2 $'.sshrc.d and .sshrc files are too large to send\ncommand size: '$cmd_size' bytes, limit: '$max_cmd_size$' bytes (override with SSHRC_MAX_CMD_SIZE)'
             return 1
@@ -79,8 +80,6 @@ EOF
         return 1
     fi
 }
-
-SSHARGS=()
 
 # The ssh options that take a value (e.g. -p 22), one letter each. Every other
 # option is a plain flag (e.g. -v, -N) that stands alone.
@@ -108,8 +107,14 @@ function sshrc_option_needs_next_word() {
   return 1
 }
 
+# Parse the command line "$@" into SSHARGS (options for ssh), DOMAIN (the host)
+# and CMDARG (an optional command to run there). Anything from a previous call
+# is discarded.
 function sshrc_parse() {
   local endopts=
+  SSHARGS=()
+  DOMAIN=
+  CMDARG=
   while [[ -n $1 ]]; do
     if [[ -z $endopts && $1 == -- ]]; then
       endopts=1
