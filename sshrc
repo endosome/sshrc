@@ -20,7 +20,7 @@ function sshrc() {
         local payload
         payload=$(tar czf - -h -C "$SSHHOME" $files | openssl enc -base64; exit "${PIPESTATUS[0]}") || {
             echo >&2 "sshrc: failed to archive $files in $SSHHOME"
-            exit 1
+            return 1
         }
         local remote_cmd="
             command -v openssl >/dev/null 2>&1 || { echo >&2 \"sshrc requires openssl to be installed on the server, but it's not. Aborting.\"; exit 1; }
@@ -29,7 +29,7 @@ function sshrc() {
             export SSHHOME
             export SSHRCCLEANUP=\$SSHHOME
             trap \"rm -rf \$SSHRCCLEANUP; exit\" 0
-            echo $'"$(cat "$0" | openssl enc -base64)"' | tr -s ' ' $'\n' | openssl enc -base64 -d > \$SSHHOME/sshrc
+            echo $'"$(cat "${BASH_SOURCE[0]}" | openssl enc -base64)"' | tr -s ' ' $'\n' | openssl enc -base64 -d > \$SSHHOME/sshrc
             chmod +x \$SSHHOME/sshrc
 
             echo $'"$( cat << 'EOF' | openssl enc -base64
@@ -71,12 +71,12 @@ EOF
         local cmd_size=$(printf %s "$remote_cmd" | LC_ALL=C wc -c)
         if [ "$cmd_size" -ge "$max_cmd_size" ]; then
             echo >&2 $'.sshrc.d and .sshrc files are too large to send\ncommand size: '$cmd_size' bytes, limit: '$max_cmd_size$' bytes (override with SSHRC_MAX_CMD_SIZE)'
-            exit 1
+            return 1
         fi
         ssh -t "${SSHARGS[@]}" -- "$DOMAIN" "$remote_cmd"
     else
         echo "No such file: $SSHHOME/.sshrc" >&2
-        exit 1
+        return 1
     fi
 }
 
@@ -104,10 +104,13 @@ function sshrc_parse() {
     shift
   done
   if [ -z "$DOMAIN" ]; then
-    ssh "${SSHARGS[@]}"; exit 1;
+    ssh "${SSHARGS[@]}"; return 1
   fi
 }
 
-command -v openssl >/dev/null 2>&1 || { echo >&2 "sshrc requires openssl to be installed locally, but it's not. Aborting."; exit 1; }
-sshrc_parse "$@"
-sshrc
+# Only run when executed, so the functions can also be sourced and reused
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+    command -v openssl >/dev/null 2>&1 || { echo >&2 "sshrc requires openssl to be installed locally, but it's not. Aborting."; exit 1; }
+    sshrc_parse "$@" && sshrc
+    exit
+fi
