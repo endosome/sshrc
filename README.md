@@ -117,7 +117,7 @@ You may have different configurations for different servers. I recommend the fol
 
 ## Development
 
-Run the tests with `bash tests/test_sshrc_parse.sh` and `bash tests/test_moshrc.sh`, and lint with `shellcheck -x -P SCRIPTDIR sshrc moshrc tests/*.sh`.
+Run the tests with `bash tests/test_sshrc_parse.sh` and `bash tests/test_moshrc.sh`. `tests/test_integration.sh` runs sshrc and moshrc against a real ssh and mosh server; it needs a login that works without a prompt, e.g. `SSHRC_TEST_HOST=localhost SSHRC_TEST_KEY=~/.ssh/key bash tests/test_integration.sh` (it skips itself otherwise). Lint with `shellcheck -x -P SCRIPTDIR sshrc moshrc tests/*.sh`.
 
 
 [sshrc-git]: https://aur.archlinux.org/packages/sshrc-git
