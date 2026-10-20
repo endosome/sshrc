@@ -60,29 +60,33 @@ If you want to load your .vim folder as well, you can 1) put the .vim folder in 
 
 ### Tmux
 
-If you use tmux frequently, you can make sshrc work there as well. The following seems complicated, but hopefully it should just work.
+Link `sshrc-tmux.sh` from this repository into `~/.sshrc.d/sshrc-tmux.sh`,
+then add this to `~/.sshrc`:
 
-    $ cat << 'EOF' >> ~/.sshrc
-    alias foo='echo I work with tmux, too'
-    
-    tmuxrc() {
-        local TMUXDIR=/tmp/russelltmuxserver
-        if ! [ -d $TMUXDIR ]; then
-            rm -rf $TMUXDIR
-            mkdir -p $TMUXDIR
-        fi
-        rm -rf $TMUXDIR/.sshrc.d
-        cp -r $SSHHOME/.sshrc $SSHHOME/bashsshrc $SSHHOME/sshrc $SSHHOME/.sshrc.d $TMUXDIR
-        SSHHOME=$TMUXDIR SHELL=$TMUXDIR/bashsshrc /usr/bin/tmux -S $TMUXDIR/tmuxserver $@
-    }
-    export SHELL=`which bash`
-    EOF
-    $ sshrc me@myserver
-    $ tmuxrc
-    $ foo
-    I work with tmux, too
+```bash
+source "$SSHHOME/.sshrc.d/sshrc-tmux.sh"
+export SHELL="$(command -v bash)"
+```
 
-The -S option will start a separate tmux server. You can still safely access the vanilla tmux server with `tmux`. Tmux servers can persist for longer than your ssh session, so the above `tmuxrc` function copies your configs to the more permenant /tmp/russelltmuxserver, which won't be deleted when you close your ssh session. Starting tmux with the SHELL environment variable set to bashsshrc will take care of loading your configs with each new terminal. Setting SHELL back to /bin/bash when you're done is important to prevent quirks due to tmux sessions having a non-default SHELL variable.
+Run `tmuxrc` after connecting. The helper retains the shell payload and socket
+in `${TMPDIR:-/tmp}/sshrctmuxserver-$UID`, a private directory for each remote
+account. Detached sessions survive subsequent SSHRC logins. Set `SSHRC_TMUX_DIR`
+to override the path, using a separate directory for each account. Preparation
+failures stop before tmux runs; the directory must be owned by the current user
+and must not be a symlink. The helper requires Bash and GNU coreutils.
+
+`tmux` continues to use the host's own server. To wrap plain `tmux` too, add
+`function tmux() { tmuxrc "$@"; }` to your `.sshrc`; `command tmux` bypasses it.
+Calls inside wrapped panes pass through to the current server.
+
+If `.sshrc.d/sshrc_tmux.conf` is present, the helper passes it to tmux with `-f`.
+That configuration should load the host's config itself if desired.
+
+Older README examples used a shared directory such as `/tmp/russelltmuxserver`,
+which fails when a different account owns it. Existing sessions stay on their
+old socket; their owner can attach with
+`command tmux -S /tmp/russelltmuxserver/tmuxserver attach` (adjust the path if
+customized). The helper's new socket starts a separate server.
 
 ### Specializing .sshrc to individual servers
 
@@ -117,7 +121,7 @@ You may have different configurations for different servers. I recommend the fol
 
 ## Development
 
-Run the tests with `bash tests/test_sshrc_parse.sh` and `bash tests/test_moshrc.sh`. `tests/test_integration.sh` runs sshrc and moshrc against a real ssh and mosh server; it needs a login that works without a prompt, e.g. `SSHRC_TEST_HOST=localhost SSHRC_TEST_KEY=~/.ssh/key bash tests/test_integration.sh` (it skips itself otherwise). Lint with `shellcheck -x -P SCRIPTDIR sshrc moshrc tests/*.sh`.
+Run the tests with `bash tests/test_sshrc_parse.sh` and `bash tests/test_moshrc.sh`. `tests/test_integration.sh` runs sshrc and moshrc against a real ssh and mosh server; it needs a login that works without a prompt, e.g. `SSHRC_TEST_HOST=localhost SSHRC_TEST_KEY=~/.ssh/key bash tests/test_integration.sh` (it skips itself otherwise). Run `bash tests/test_tmux.sh` for the tmux helper. Lint with `shellcheck -x -P SCRIPTDIR sshrc moshrc sshrc-tmux.sh tests/*.sh`.
 
 
 [sshrc-git]: https://aur.archlinux.org/packages/sshrc-git
