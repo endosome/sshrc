@@ -36,6 +36,17 @@ function tmuxrc() {
 	local tmux_args=(-S "$TMUXDIR/tmuxserver")
 	if [ -r "$TMUXDIR/.sshrc.d/sshrc_tmux.conf" ]; then
 		tmux_args+=(-f "$TMUXDIR/.sshrc.d/sshrc_tmux.conf")
+		# -f is read only when the server starts. Apply updated settings before
+		# creating a session on a server retained from an earlier login.
+		case "${1:-}" in
+		'' | new | new-session)
+			if [ -S "$TMUXDIR/tmuxserver" ]; then
+				TMUX_WRAPPED=1 SSHHOME="$TMUXDIR" SHELL="$TMUXDIR/bashsshrc" \
+					command "$tmux_bin" -S "$TMUXDIR/tmuxserver" source-file -q \
+					"$TMUXDIR/.sshrc.d/sshrc_tmux.conf" || return 1
+			fi
+			;;
+		esac
 	fi
 
 	# Mark that we've wrapped to avoid recursion; use the real tmux binary

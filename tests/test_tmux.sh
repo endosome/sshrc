@@ -160,4 +160,19 @@ run_remote 'tmux ls' "$no_tmux_bin" 2>"$test_dir/error" || status=$?
 	fail "Unexpected error without tmux: $(cat "$test_dir/error")"
 [[ ! -s $MOCK_TMUX_LOG ]] || fail 'tmux ran although it is not installed.'
 
+# An already-running server must pick up a changed configuration before a new
+# session is created; tmux ignores -f once the server exists.
+if command -v tmux >/dev/null 2>&1; then
+	real_tmux_dir="$test_dir/real-tmux"
+	mkdir --parents "$real_tmux_dir"
+	printf "set-hook -g after-new-session 'set-option -g @reloaded yes'\n" \
+		>"$session/.sshrc.d/sshrc_tmux.conf"
+	tmux -S "$real_tmux_dir/tmuxserver" -f /dev/null new-session -d -s first
+	HOME="$test_home" SSHHOME="$session" SSHRC_TMUX_DIR="$real_tmux_dir" \
+		bash --noprofile --norc -c 'source "$SSHHOME/.sshrc"; tmux new-session -d -s second'
+	[[ $(tmux -S "$real_tmux_dir/tmuxserver" show-options -gqv @reloaded) == yes ]] ||
+		fail 'An existing tmux server did not load the updated SSHRC config'
+	tmux -S "$real_tmux_dir/tmuxserver" kill-server
+fi
+
 printf 'SSHRC tmux wrapper tests passed\n'
