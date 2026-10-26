@@ -32,6 +32,12 @@ function tmuxrc() {
 	rm --recursive --force -- "$TMUXDIR/.sshrc.d" || return 1
 	cp --recursive -- "$SSHHOME/.sshrc" "$SSHHOME/bashsshrc" "$SSHHOME/sshrc" "$SSHHOME/.sshrc.d" "$TMUXDIR" || return 1
 
+	# A socket left by a server that died (a crash or a hard reset of the host) makes every command that expects a
+	# server fail with "no server running": remove it so that a new server starts.
+	if [ -S "$TMUXDIR/tmuxserver" ] && ! command "$tmux_bin" -S "$TMUXDIR/tmuxserver" list-sessions >/dev/null 2>&1; then
+		rm --force -- "$TMUXDIR/tmuxserver" || return 1
+	fi
+
 	# -f replaces the host's own tmux config, so sshrc_tmux.conf loads that itself
 	local tmux_args=(-S "$TMUXDIR/tmuxserver")
 	if [ -r "$TMUXDIR/.sshrc.d/sshrc_tmux.conf" ]; then
